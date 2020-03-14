@@ -25,17 +25,6 @@ set(DEF_INSTALL_DROGON_CMAKE_DIR lib/cmake/Drogon)
 set(INSTALL_DROGON_CMAKE_DIR
     ${DEF_INSTALL_DROGON_CMAKE_DIR}
     CACHE PATH "Installation directory for cmake files")
-# Make relative paths absolute (needed later on)
-foreach(p
-        LIB
-        BIN
-        INCLUDE
-        DROGON_CMAKE)
-  set(var INSTALL_${p}_DIR)
-  if(NOT IS_ABSOLUTE "${${var}}")
-    set(${var} "${CMAKE_INSTALL_PREFIX}/${${var}}")
-  endif()
-endforeach()
 
 if(BUILD_DROGON_SHARED)
   set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
@@ -100,44 +89,19 @@ endif(DROGON_CXX_STANDARD LESS 17)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules/)
 
 # jsoncpp
-find_package(Jsoncpp REQUIRED)
-target_include_directories(${PROJECT_NAME} PUBLIC ${JSONCPP_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PUBLIC ${JSONCPP_LIBRARIES})
-list(APPEND INCLUDE_DIRS_FOR_DYNAMIC_VIEW ${JSONCPP_INCLUDE_DIRS})
-message(STATUS "jsoncpp inc path:" ${JSONCPP_INCLUDE_DIRS})
-
-# message(STATUS ${JSONCPP_LIBRARIES})
-if(NOT EXISTS ${JSONCPP_INCLUDE_DIRS}/json/version.h)
-  message(FATAL_ERROR "Error: jsoncpp lib is too old.....stop")
-endif()
+find_package(jsoncpp 1.7 REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC jsoncpp_lib)
 
 if(NOT WIN32)
-  exec_program(
-    cat
-    ARGS
-    "${JSONCPP_INCLUDE_DIRS}/json/version.h |grep JSONCPP_VERSION_STRING|sed s'/.*define/define/'|awk '{printf $3}'|sed s'/\"//g'"
-    OUTPUT_VARIABLE
-    jsoncpp_ver)
-  message(STATUS "jsoncpp verson:" ${jsoncpp_ver})
-  if(jsoncpp_ver LESS 1.7)
-    message(
-      FATAL_ERROR
-        "jsoncpp lib is too old,please get new version from https://github.com/open-source-parsers/jsoncpp"
-      )
-  endif(jsoncpp_ver LESS 1.7)
-
   find_package(UUID REQUIRED)
-  target_include_directories(${PROJECT_NAME} PRIVATE ${UUID_INCLUDE_DIR})
-  target_link_libraries(${PROJECT_NAME} PRIVATE ${UUID_LIBRARIES})
+  target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::libuuid)
 
   try_compile(normal_uuid ${CMAKE_BINARY_DIR}/cmaketest
               ${PROJECT_SOURCE_DIR}/cmake/tests/normal_uuid_lib_test.cc
-              LINK_LIBRARIES ${UUID_LIBRARIES}
-              CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${UUID_INCLUDE_DIR}")
+              LINK_LIBRARIES PkgConfig::libuuid)
   try_compile(ossp_uuid ${CMAKE_BINARY_DIR}/cmaketest
               ${PROJECT_SOURCE_DIR}/cmake/tests/ossp_uuid_lib_test.cc
-              LINK_LIBRARIES ${UUID_LIBRARIES}
-              CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${UUID_INCLUDE_DIR}")
+              LINK_LIBRARIES PkgConfig::libuuid)
   if(normal_uuid)
     add_definitions(-DUSE_OSSP_UUID=0)
   elseif(ossp_uuid)
@@ -231,8 +195,7 @@ if(BUILD_ORM)
   else(MYSQL_FOUND)
     if(MSVC)
       find_package(ZLIB REQUIRED)
-      target_include_directories(${PROJECT_NAME} PRIVATE ${ZLIB_INCLUDE_DIR})
-      target_link_libraries(${PROJECT_NAME} PRIVATE ${ZLIB_LIBRARIES})
+      target_link_libraries(${PROJECT_NAME} PRIVATE ZLIB::ZLIB)
     endif(MSVC)
   endif(MYSQL_FOUND)
 
@@ -250,15 +213,12 @@ endif(BUILD_ORM)
 
 if((NOT MSVC) OR (NOT BUILD_ORM))
   find_package(ZLIB REQUIRED)
-  target_include_directories(${PROJECT_NAME} PRIVATE ${ZLIB_INCLUDE_DIR})
-  target_link_libraries(${PROJECT_NAME} PRIVATE ${ZLIB_LIBRARIES})
-  message(STATUS "zlib:" ${ZLIB_LIBRARIES})
+  target_link_libraries(${PROJECT_NAME} PRIVATE ZLIB::ZLIB)
 endif((NOT MSVC) OR (NOT BUILD_ORM))
 
 find_package(OpenSSL)
 if(OpenSSL_FOUND)
-  target_include_directories(${PROJECT_NAME} PRIVATE ${OPENSSL_INCLUDE_DIR})
-  target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENSSL_LIBRARIES})
+  target_link_libraries(${PROJECT_NAME} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else(OpenSSL_FOUND)
   set(DROGON_SOURCES ${DROGON_SOURCES} lib/src/ssl_funcs/Md5.cc
                      lib/src/ssl_funcs/Sha1.cc)
@@ -474,6 +434,7 @@ write_basic_package_version_file(
 install(
   FILES "${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/DrogonConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/DrogonConfigVersion.cmake"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/FindUUID.cmake"
   DESTINATION "${INSTALL_DROGON_CMAKE_DIR}"
   COMPONENT dev)
 
